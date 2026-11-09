@@ -1,6 +1,6 @@
 ---
 name: abyss-ios-tweaks
-description: 生成和维护 Abyss 约定的 Theos deb 插件工程：插件专属命名、可选 PreferenceLoader 面板与自定义滑条、Rootful/Rootless/Roothide 打包，以及 GitHub Actions 构建工作流。用于 Theos tweak 工程，不用于 Apelin 项目的构建，也不用于 IPA 签名和侧载。
+description: 生成和维护 Abyss 约定的 Theos deb 插件工程：插件专属命名、可选 PreferenceLoader 面板与自定义滑条、Rootful/Rootless/Roothide 打包，以及 GitHub Actions 构建工作流（macos-15 + Xcode 16.4）。用于 Theos tweak 工程，不用于 Apelin 项目的构建，也不用于 IPA 签名和侧载。
 ---
 
 # Abyss iOS Tweaks（Theos 工程）
@@ -46,13 +46,44 @@ python3 scripts/doctor.py /work/touchtrail
 - 自定义非交互浮层不接管触摸。复杂逻辑写简短原因注释，不为每次修改追加历史流水注释。
 - 保留编译警告。生成器与 doctor 通过不代表 Theos 编译或真机测试通过；分别报告验证范围。
 
+## GitHub Actions 环境（2026-11-09 真实验证）
+
+生成后的 `build.yml` 若还是旧值，推送前手动改成当前已验证的组合：
+
+| 配置项 | 已验证可用 | 已证实不可用 |
+|---|---|---|
+| runner | `macos-15` | `macos-14`（GitHub 已停用，报 "configuration is not supported"） |
+| Xcode | `16.4` | `15.4`（macos-15 上不存在，setup-xcode 会列出可用版本） |
+| Theos | `roothide/theos`（三种 scheme 共用） | |
+| SDK | 16.5（theos/sdks 稀疏检出） | |
+
+构建失败时先读日志：setup-xcode 会打印 runner 上全部可用 Xcode 版本表，从表里选最新稳定版改入工作流再推。矩阵默认 `rootless` + `roothide`（本技能作者的设备环境）。
+
+## 推送 CI 前的预检（失败案例固化）
+
+每个工程在推送触发 GitHub Actions 之前，先在本机用 clang 做 `-Werror` 语法预检，
+能在推送前挡住绝大多数编译失败：
+
+```sh
+clang -fsyntax-only -fobjc-arc -I./Headers -I./Sources \
+  -miphoneos-version-min=15.0 -arch arm64e -Werror <源文件>
+```
+
+本机没有 Theos 的 `rootless.h`/`roothide.h` 时，用两行的替身头临时 include（只做语法检查，不入库）；`.xm` 先复制为 `.mm` 检查。有 `-Werror` 时删掉所有未使用的 static 函数与变量。
+
+代码写法上的硬性规则（均来自真实失败案例，见 troubleshooting.md）：
+
+- 自定义 NSString 常量**只用 `static NSString * const` 定义一次**，绝不用 `#define` 宏再在别的头重复声明同名变量——同名宏会把声明行展开成语法错误或类型不匹配。
+- `os_log_create` 的参数是 `const char *`：传 NSString 常量要 `.UTF8String`。
+- 删除/重命名 hook 时同步删掉不再被调用的 helper，`-Werror` 下 unused function 直接构建失败。
+
 ## 维护入口
 
 | 要维护的内容 | 唯一入口 |
 |---|---|
 | 作者、包域、SDK 版本、包版本 | `assets/defaults.json` |
 | 默认生成的代码、Makefile、plist | `assets/base/`、`assets/preferences/`、`assets/slider/` |
-| GitHub Actions 构建与发布 | `assets/github-actions/.github/workflows/build.yml` |
+| GitHub Actions 构建与发布 | `assets/github-actions/.github/workflows/build.yml`（runner/Xcode 以本文「GitHub Actions 环境」表的已验证值为准） |
 | 参数替换、文件生成 | `scripts/create.py` |
 | 工程与工具链只读检查 | `scripts/doctor.py` |
 | 原理、适配边界、人工验收 | `references/` 对应专题 |
