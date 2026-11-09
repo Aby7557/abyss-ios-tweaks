@@ -1,0 +1,9 @@
+{
+  "author": "Abyss",
+  "class_prefix": "Abyss",
+  "package_prefix": "com.abyss",
+  "section": "Tweaks",
+  "version": "0.0.1",
+  "sdk_version": "16.5",
+  "minimum_ios": "16.0"
+}
